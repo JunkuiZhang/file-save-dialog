@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use windows::{
     core::*,
     System::{DispatcherQueue, DispatcherQueueHandler},
@@ -21,18 +19,6 @@ use windows::{
         },
     },
 };
-
-static QUEUE: LazyLock<DispatcherQueue> = LazyLock::new(|| {
-    let controller = unsafe {
-        let options = DispatcherQueueOptions {
-            dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
-            threadType: DQTYPE_THREAD_CURRENT,
-            apartmentType: DQTAT_COM_NONE,
-        };
-        CreateDispatcherQueueController(options).unwrap()
-    };
-    controller.DispatcherQueue().unwrap()
-});
 
 fn open_dialog() -> Result<()> {
     unsafe {
@@ -67,6 +53,15 @@ fn open_dialog() -> Result<()> {
 fn main() -> Result<()> {
     unsafe {
         OleInitialize(None)?;
+
+        let options = DispatcherQueueOptions {
+            dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+            threadType: DQTYPE_THREAD_CURRENT,
+            apartmentType: DQTAT_COM_NONE,
+        };
+        let con = CreateDispatcherQueueController(options).unwrap();
+        con.DispatcherQueue().unwrap();
+
         let instance = GetModuleHandleA(None)?;
         let window_class = s!("window");
 
@@ -121,7 +116,8 @@ extern "system" fn wndproc(window: HWND, message: u32, wparam: WPARAM, lparam: L
                     open_dialog().unwrap();
                     Ok(())
                 });
-                QUEUE.TryEnqueue(&handler).unwrap();
+                let queue = DispatcherQueue::GetForCurrentThread().unwrap();
+                queue.TryEnqueue(&handler).unwrap();
                 LRESULT(0)
             }
             WM_DESTROY => {
